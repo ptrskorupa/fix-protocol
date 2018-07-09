@@ -69,6 +69,13 @@ module Fix
         !!(str == 'Y')
       end
 
+      def dump_qty(qty)
+        qty.to_s
+      end
+
+      def parse_qty(str)
+        str && BigDecimal.new(str)
+      end
     end
   end
 end

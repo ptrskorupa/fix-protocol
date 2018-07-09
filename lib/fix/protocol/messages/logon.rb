@@ -13,7 +13,7 @@ module Fix
           field :password,            tag: 554, required: true
           field :raw_data,            tag: 96, required: true
           field :cancel_orders_on_disconnect, tag: 8013, required: false, type: :yn_bool, default: true
-          field :reset_seq_num_flag,  tag: 141,                 type: :yn_bool, default: false
+          field :drop_copy_flag,      tag: 9406, type: :yn_bool, default: true
         end
 
         #

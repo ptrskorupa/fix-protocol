@@ -6,12 +6,19 @@ require 'fix/protocol/parse_failure'
 #
 # Main Fix namespace
 #
+
 module Fix
 
   #
   # Main protocol namespace
   #
   module Protocol
+    MSG_REGEX = /(^8\=[^\x01]+\x019\=([^\x01]+)\x01(35\=([^\x01]+)\x01.+))10\=([^\x01]+)\x01$/
+    # m[1] msg without checksum
+    # m[2] msg length as string
+    # m[3] msg body
+    # m[4] msg type
+    # m[5] msh checksum
 
     #
     # Parses a string into a Fix::Protocol::Message instance
@@ -20,46 +27,39 @@ module Fix
     # @return [Fix::Protocol::Message] A +Fix::Protocol::Message+ instance, or a +Fix::Protocol::ParseFailure+ in case of failure
     #
     def self.parse(str)
-      errors    = []
-      msg_type  = str.match(/^8\=[^\x01]+\x019\=[^\x01]+\x0135\=([^\x01]+)\x01/)
+      errors = []
+      m = str.match(MSG_REGEX).to_a
 
-      unless str.match(/^8\=[^\x01]+\x019\=[^\x01]+\x0135\=[^\x01]+\x01.+10\=[^\x01]+\x01/)
-        FP::ParseFailure.new("Malformed message <#{str}>")
-      else
-
-        klass = MessageClassMapping.get(msg_type[1])
-
-        unless klass
-          errors << "Unknown message type <#{msg_type[1]}>"
-        end
+      if m.any?
+        klass = MessageClassMapping.get(m[4])
+        errors << "Unknown message type <#{m[4]}>" unless klass
 
         # Check message length
-        length = str.gsub(/10\=[^\x01]+\x01$/, '').gsub(/^8\=[^\x01]+\x019\=([^\x01]+)\x01/, '').length
-        if length != $1.to_i
-          errors << "Incorrect body length"
-        end
+        errors << "Incorrect body length, expected <#{m[3].length}>, got <#{m[2].to_i}>" if m[3].length != m[2].to_i
 
         # Check checksum
-        checksum = str.match(/10\=([^\x01]+)\x01/)[1]
-        expected = ('%03d' % (str.gsub(/10\=[^\x01]+\x01/, '').bytes.inject(&:+) % 256))
-        if checksum != expected
-          errors << "Incorrect checksum, expected <#{expected}>, got <#{checksum}>"
-        end
+        expected = format('%03d', m[1].bytes.inject(&:+) % 256)
+        errors << "Incorrect checksum, expected <#{expected}>, got <#{m[5]}>" if m[5] != expected
 
-        if errors.empty?
-          msg = klass.parse(str)
+        msg = klass.parse(str)
 
-          if msg.valid?
-            msg
-          else
-            FP::ParseFailure.new(msg.errors)
-          end
+        if msg.valid?
+          msg
         else
-          FP::ParseFailure.new(errors)
+          FP::ParseFailure.new(msg.errors)
         end
+      else
+        FP::ParseFailure.new("Malformed message <#{str}>")
       end
     end
 
+    def self.alias_namespace!
+      Object.const_set(:FP, Protocol) unless Object.const_defined?(:FP)
+    end
+
+    def self.camelcase(s)
+      s.to_s.split(' ').map { |str| str.split('_') }.flatten.map(&:capitalize).join.to_sym
+    end
     #
     # Alias the +Fix::Protocol+ namespace to +FP+ if possible
     #
